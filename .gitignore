@@ -50,7 +50,7 @@ AppDir
 /result
 
 ## Files related to Luanti development cycle
-/*.patch
+# /*.patch
 *.diff
 # GNU Patch reject file
 *.rej

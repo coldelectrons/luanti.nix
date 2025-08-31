@@ -7,6 +7,7 @@ endif()
 project(luanti)
 set(PROJECT_NAME_CAPITALIZED "Luanti")
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(GCC_MINIMUM_VERSION "7.5")
@@ -34,11 +35,12 @@ if (CMAKE_BUILD_TYPE STREQUAL Debug)
 endif()
 
 # Configuration options
-set(BUILD_CLIENT TRUE CACHE BOOL "Build client")
-set(BUILD_SERVER FALSE CACHE BOOL "Build server")
+set(BUILD_CLIENT FALSE CACHE BOOL "Build client")
+set(BUILD_SERVER TRUE CACHE BOOL "Build server")
+set(BUILD_PROXY TRUE CACHE BOOL "Build proxy")
 set(BUILD_UNITTESTS TRUE CACHE BOOL "Build unittests")
 set(BUILD_BENCHMARKS FALSE CACHE BOOL "Build benchmarks")
-set(BUILD_DOCUMENTATION TRUE CACHE BOOL "Build documentation")
+set(BUILD_DOCUMENTATION FALSE CACHE BOOL "Build documentation")
 
 set(DEFAULT_ENABLE_LTO TRUE)
 # by default don't enable on Debug builds to get faster builds

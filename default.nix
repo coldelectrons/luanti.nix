@@ -1,40 +1,39 @@
-{
-  system ? builtins.currentSystem,
-  lock ? builtins.fromJSON (builtins.readFile ./flake.lock),
-  # The official nixpkgs input, pinned with the hash defined in the flake.lock file
+{ system ? builtins.currentSystem
+, lock ? builtins.fromJSON (builtins.readFile ./flake.lock)
+, # The official nixpkgs input, pinned with the hash defined in the flake.lock file
   pkgs ? let
     nixpkgs = fetchTarball {
       url = "https://github.com/NixOS/nixpkgs/archive/${lock.nodes.nixpkgs.locked.rev}.tar.gz";
       sha256 = lock.nodes.nixpkgs.locked.narHash;
     };
   in
-    import nixpkgs {
-      overlays = [];
-      config = {};
-      inherit system;
-    },
-  # Helper tool for generating compile-commands.json
-  miniCompileCommands ?
-    fetchTarball {
-      url = "https://github.com/danielbarter/mini_compile_commands/archive/${lock.nodes.miniCompileCommands.locked.rev}.tar.gz";
-      sha256 = lock.nodes.miniCompileCommands.locked.narHash;
-    },
-  # lib,
+  import nixpkgs {
+    overlays = [ ];
+    config = { };
+    inherit system;
+  }
+, # Helper tool for generating compile-commands.json
+  miniCompileCommands ? fetchTarball {
+    url = "https://github.com/danielbarter/mini_compile_commands/archive/${lock.nodes.miniCompileCommands.locked.rev}.tar.gz";
+    sha256 = lock.nodes.miniCompileCommands.locked.narHash;
+  }
+, # lib,
   # stdenv,
   # fetchFromGitHub,
   # gitUpdater,
   # substitute,
-  buildClient ? false,
-  buildServer ? true,
-  useSDL2 ? false,
+  buildClient ? false
+, buildServer ? true
+, useSDL2 ? false
+,
 }:
 let
-	lib = pkgs.lib;
+  lib = pkgs.lib;
   # Using mini_compile_commands to export compile_commands.json
   # https://github.com/danielbarter/mini_compile_commands/
   # Look at the README.md file for instructions on generating compile_commands.json
-  mcc-env = (pkgs.callPackage miniCompileCommands {}).wrap pkgs.stdenv;
-  mcc-hook = (pkgs.callPackage miniCompileCommands {}).hook;
+  mcc-env = (pkgs.callPackage miniCompileCommands { }).wrap pkgs.stdenv;
+  mcc-hook = (pkgs.callPackage miniCompileCommands { }).hook;
 
   # Stdenv is base for packaging software in Nix It is used to pull in dependencies such as the GCC toolchain,
   # GNU make, core utilities, patch and diff utilities, and so on. Basic tools needed to compile a huge pile
@@ -45,7 +44,7 @@ let
   # mkDerivation is the main function used to build packages with the Stdenv
   package = mcc-env.mkDerivation (self: {
     name = "luanti";
-		version = "5.11.0";
+    version = "5.14.0";
 
     # Programs and libraries used/available at build-time
     nativeBuildInputs = with pkgs; [
@@ -53,50 +52,54 @@ let
 
       ncurses
       cmake
-			doxygen
-			graphviz
-			ninja
+      doxygen
+      graphviz
+      ninja
+
+      irrlicht
     ];
 
 
     # Programs and libraries used by the new derivation at run-time
     buildInputs = with pkgs; [
       fmt
-			jsoncpp
-			gettext
-			freetype
-			sqlite
-			curl
-			bzip2
-			ncurses
-			gmp
-			libspatialindex
-		]
-		++ lib.optional (lib.meta.availableOn mcc-env.hostPlatform luajit) luajit
-		++ lib.optionals mcc-env.hostPlatform.isDarwin [
-			libiconv
-		]
-		++ lib.optionals buildClient [
-			libpng
-			libjpeg
-			libGLU
-			openal
-			libogg
-			libvorbis
-		]
-		++ lib.optionals (buildClient && useSDL2) [
-			SDL2
-		]
-		++ lib.optionals (buildClient && !mcc-env.hostPlatform.isDarwin && !useSDL2) [
-			xorg.libX11
-			xorg.libXi
-		]
-		++ lib.optionals buildServer [
-			leveldb
-			libpq
-			hiredis
-			prometheus-cpp
-		];
+      jsoncpp
+      gettext
+      freetype
+      sqlite
+      curl
+      bzip2
+      ncurses
+      gmp
+      libspatialindex
+      irrlicht
+      coreutils
+    ]
+    ++ lib.optional (lib.meta.availableOn mcc-env.hostPlatform luajit) luajit
+    ++ lib.optionals mcc-env.hostPlatform.isDarwin [
+      libiconv
+    ]
+    ++ lib.optionals buildClient [
+      libpng
+      libjpeg
+      libGLU
+      openal
+      libogg
+      libvorbis
+    ]
+    ++ lib.optionals (buildClient && useSDL2) [
+      SDL2
+    ]
+    ++ lib.optionals (buildClient && !mcc-env.hostPlatform.isDarwin && !useSDL2) [
+      xorg.libX11
+      xorg.libXi
+    ]
+    ++ lib.optionals buildServer [
+      leveldb
+      libpq
+      hiredis
+      prometheus-cpp
+    ];
 
     # builtins.path is used since source of our package is the current directory: ./
     # Alternatively, you can use: fetchFromGitHub, fetchTarball or similar
@@ -109,66 +112,66 @@ let
         !(pkgs.lib.hasPrefix "." (baseNameOf path));
     };
 
-		patches = [
-			(lib.substitute {
-				src = ./0000-mark-rm-for-substitution.patch;
-				substitutions = [
-					"--subst-var-by"
-					"RM_COMMAND"
-					"${pkgs.coreutils}/bin/rm"
-				];
-			})
-		];
+    patches = [
+      (pkgs.substitute {
+        src = ./0000-mark-rm-for-substitution.patch;
+        substitutions = [
+          "--subst-var-by"
+          "RM_COMMAND"
+          "${pkgs.coreutils}/bin/rm"
+        ];
+      })
+    ];
 
-		postPatch = lib.optionalString pkgs.mcc-env.hostPlatform.isDarwin ''
-			sed -i '/pagezero_size/d;/fixup_bundle/d' src/CMakeLists.txt
-		'';
+    postPatch = lib.optionalString mcc-env.hostPlatform.isDarwin ''
+      			sed -i '/pagezero_size/d;/fixup_bundle/d' src/CMakeLists.txt
+      		'';
 
-		postInstall =
-			lib.optionalString mcc-env.hostPlatform.isLinux ''
-				patchShebangs $out
-			''
-			+ lib.optionalString mcc-env.hostPlatform.isDarwin ''
-				mkdir -p $out/Applications
-				mv $out/luanti.app $out/Applications
-			'';
+    postInstall =
+      lib.optionalString mcc-env.hostPlatform.isLinux ''
+        				patchShebangs $out
+        			''
+      + lib.optionalString mcc-env.hostPlatform.isDarwin ''
+        				mkdir -p $out/Applications
+        				mv $out/luanti.app $out/Applications
+        			'';
 
-		doCheck = true;
+    doCheck = true;
 
-		meta = with lib; {
-			homepage = "https://www.luanti.org/";
-			description = "An open source voxel game engine (formerly Minetest)";
-			license = licenses.lgpl21Plus;
-			platforms = platforms.linux ++ platforms.darwin;
-			maintainers = with maintainers; [
-				# coldelectrons
-			];
-			mainProgram = if buildClient then "luanti" else "luantiserver";
-		};
+    meta = with lib; {
+      homepage = "https://www.luanti.org/";
+      description = "An open source voxel game engine (formerly Minetest)";
+      license = licenses.lgpl21Plus;
+      platforms = platforms.linux ++ platforms.darwin;
+      maintainers = with maintainers; [
+        # coldelectrons
+      ];
+      mainProgram = if buildClient then "luanti" else "luantiserver";
+    };
 
-		cmakeFlags = [
+    cmakeFlags = [
       "--no-warn-unused-cli" # Supresses unused varibles warning
-			(lib.cmakeBool "BUILD_CLIENT" true)
-			(lib.cmakeBool "BUILD_SERVER" true)
-			(lib.cmakeBool "BUILD_UNITTESTS" (lib.finalAttrs.finalPackage.doCheck or false))
-			(lib.cmakeBool "ENABLE_PROMETHEUS" true)
-			(lib.cmakeBool "USE_SDL2" true)
-			# Ensure we use system libraries
-			(lib.cmakeBool "ENABLE_SYSTEM_GMP" true)
-			(lib.cmakeBool "ENABLE_SYSTEM_JSONCPP" true)
-			# Updates are handled by nix anyway
-			(lib.cmakeBool "ENABLE_UPDATE_CHECKER" false)
-			# ...but make it clear that this is a nix package
-			(lib.cmakeFeature "VERSION_EXTRA" "NixOS")
+      (lib.cmakeBool "BUILD_CLIENT" buildClient)
+      (lib.cmakeBool "BUILD_SERVER" buildServer)
+      (lib.cmakeBool "BUILD_UNITTESTS" (lib.finalAttrs.finalPackage.doCheck or false))
+      (lib.cmakeBool "ENABLE_PROMETHEUS" buildServer)
+      (lib.cmakeBool "USE_SDL2" buildClient)
+      # Ensure we use system libraries
+      (lib.cmakeBool "ENABLE_SYSTEM_GMP" true)
+      (lib.cmakeBool "ENABLE_SYSTEM_JSONCPP" true)
+      # Updates are handled by nix anyway
+      (lib.cmakeBool "ENABLE_UPDATE_CHECKER" false)
+      # ...but make it clear that this is a nix package
+      (lib.cmakeFeature "VERSION_EXTRA" "NixOS")
 
-			# Remove when https://github.com/NixOS/nixpkgs/issues/144170 is fixed
-			(lib.cmakeFeature "CMAKE_INSTALL_BINDIR" "bin")
-			(lib.cmakeFeature "CMAKE_INSTALL_DATADIR" "share")
-			(lib.cmakeFeature "CMAKE_INSTALL_DOCDIR" "share/doc/luanti")
-			(lib.cmakeFeature "CMAKE_INSTALL_MANDIR" "share/man")
-			(lib.cmakeFeature "CMAKE_INSTALL_LOCALEDIR" "share/locale")
+      # Remove when https://github.com/NixOS/nixpkgs/issues/144170 is fixed
+      (lib.cmakeFeature "CMAKE_INSTALL_BINDIR" "bin")
+      (lib.cmakeFeature "CMAKE_INSTALL_DATADIR" "share")
+      (lib.cmakeFeature "CMAKE_INSTALL_DOCDIR" "share/doc/luanti")
+      (lib.cmakeFeature "CMAKE_INSTALL_MANDIR" "share/man")
+      (lib.cmakeFeature "CMAKE_INSTALL_LOCALEDIR" "share/locale")
 
-		];
+    ];
 
     # Nix is smart enough to detect we're using cmake to build our project
     # It will read our CMakeLists.txt file and create needed definitions
@@ -201,19 +204,19 @@ let
       # pkgs = pkgs
       # shell = shell
     };
-		passthru.updateScript = lib.gitUpdater {
-			allowedVersions = "\\.";
-			ignoredVersions = "-android$";
-		};
+    passthru.updateScript = lib.gitUpdater {
+      allowedVersions = "\\.";
+      ignoredVersions = "-android$";
+    };
 
   });
 
   # Development shell
-  shell = (pkgs.mkShell.override {stdenv = mcc-env;}) {
-		LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
-		env.LANG = "C.UTF-8";
-		env.LC_ALL = "C.UTF-8";
-		# Copy build inputs (dependencies) from the derivation the nix-shell environment
+  shell = (pkgs.mkShell.override { stdenv = mcc-env; }) {
+    LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
+    env.LANG = "C.UTF-8";
+    env.LC_ALL = "C.UTF-8";
+    # Copy build inputs (dependencies) from the derivation the nix-shell environment
     # That way, there is no need for speciying dependenvies separately for derivation and shell
     inputsFrom = [
       package
@@ -221,32 +224,32 @@ let
 
     # Shell (dev environment) specific packages
     packages = with pkgs; [
-			gcc
-			cmake
-			zlib
-			zstd
-			libjpeg
-			libpng
-			libGL
-			SDL2
-			openal
-			curl
-			libvorbis
-			libogg
-			gettext
-			freetype
-			sqlite
+      gcc
+      cmake
+      zlib
+      zstd
+      libjpeg
+      libpng
+      libGL
+      SDL2
+      openal
+      curl
+      libvorbis
+      libogg
+      gettext
+      freetype
+      sqlite
+      irrlicht
     ];
 
     # Hook used for modifying the prompt look and printing the welcome message
     shellHook = ''
       PS1="\[\e[32m\][\[\e[m\]\[\e[33m\]nix-shell\\[\e[m\]:\[\e[36m\]\w\[\e[m\]\[\e[32m\]]\[\e[m\]\\$\[\e[m\] "
       alias ll="ls -l"
-      dinosay -r -b happy -w 60 "Welcome to the '${package.name}' dev environment!"
     '';
   };
-	in
-	package
+in
+package
 
 
 # stdenv.mkDerivation (finalAttrs: {
