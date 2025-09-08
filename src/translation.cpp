@@ -309,7 +309,9 @@ std::wstring Translations::unescapeC(const std::wstring &str)
 				continue;
 			}
 			default: {
-				errorstream << "Unknown escape sequence \"\\" << str[i] << "\", ignoring" << std::endl;
+				// TODO I don't know if this is a proper fix, I was just tired of the 'deleted function' error
+				// Why *can't* you just `<< str[i]` ?? It's a wchar_t
+				errorstream << "Unknown escape sequence \"\\" << wide_to_utf8(str.substr(i,1)) << "\", ignoring" << std::endl;
 				break;
 			}
 		}

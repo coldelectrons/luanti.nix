@@ -1,14 +1,15 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.20)
 if(POLICY CMP0177)
     cmake_policy(SET CMP0177 NEW)
 endif()
+
+# set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # This can be read from ${PROJECT_NAME} after project() is called
 project(luanti)
 set(PROJECT_NAME_CAPITALIZED "Luanti")
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(GCC_MINIMUM_VERSION "7.5")
 set(CLANG_MINIMUM_VERSION "7.0.1")
@@ -35,9 +36,9 @@ if (CMAKE_BUILD_TYPE STREQUAL Debug)
 endif()
 
 # Configuration options
-set(BUILD_CLIENT FALSE CACHE BOOL "Build client")
+set(BUILD_CLIENT TRUE CACHE BOOL "Build client")
 set(BUILD_SERVER TRUE CACHE BOOL "Build server")
-set(BUILD_PROXY TRUE CACHE BOOL "Build proxy")
+set(BUILD_MULTIPLEXER TRUE CACHE BOOL "Build multiplexer proxy")
 set(BUILD_UNITTESTS TRUE CACHE BOOL "Build unittests")
 set(BUILD_BENCHMARKS FALSE CACHE BOOL "Build benchmarks")
 set(BUILD_DOCUMENTATION FALSE CACHE BOOL "Build documentation")

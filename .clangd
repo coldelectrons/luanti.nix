@@ -1,5 +1,2 @@
 CompileFlags:
-  CompilationDatabase: result/compile_commands.json
-  Add: [-xc++, -Wall, -I./irr/include/]
-Style:
-  QuotedHeaders: "irr*.h"
+  CompilationDatabase: build/compile_commands.json

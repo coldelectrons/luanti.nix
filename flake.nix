@@ -3,11 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-25.05";
-    nixpkgs-unstable.url = "github:nixos/nixpkgs?ref=nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    miniCompileCommands = {
-      url = "github:danielbarter/mini_compile_commands/v0.6";
-      flake = false;
+    compileCommandsFor = {
+      url = "github:coldelectrons/compileCommandsFor";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
@@ -15,17 +14,18 @@
     { self
     , nixpkgs
     , flake-utils
-    , nixpkgs-unstable
-    , miniCompileCommands
+    , compileCommandsFor
     , ...
     }:
     flake-utils.lib.eachDefaultSystem (system:
     let
       pkgs = nixpkgs.legacyPackages.${system};
       package = import ./default.nix { inherit system pkgs; };
+      inherit (compileCommandsFor.lib.${system}) compileCommands;
     in
     {
       packages.default = package;
+      packages.compileCommands = compileCommands package;
       devShells.default = package.shell;
       formatter = pkgs.alejandra;
     }

@@ -1,7 +1,7 @@
 { system ? builtins.currentSystem
 , lock ? builtins.fromJSON (builtins.readFile ./flake.lock)
-, # The official nixpkgs input, pinned with the hash defined in the flake.lock file
-  pkgs ? let
+  # The official nixpkgs input, pinned with the hash defined in the flake.lock file
+, pkgs ? let
     nixpkgs = fetchTarball {
       url = "https://github.com/NixOS/nixpkgs/archive/${lock.nodes.nixpkgs.locked.rev}.tar.gz";
       sha256 = lock.nodes.nixpkgs.locked.narHash;
@@ -12,29 +12,21 @@
     config = { };
     inherit system;
   }
-, # Helper tool for generating compile-commands.json
-  miniCompileCommands ? fetchTarball {
-    url = "https://github.com/danielbarter/mini_compile_commands/archive/${lock.nodes.miniCompileCommands.locked.rev}.tar.gz";
-    sha256 = lock.nodes.miniCompileCommands.locked.narHash;
-  }
-, # lib,
-  # stdenv,
-  # fetchFromGitHub,
-  # gitUpdater,
-  # substitute,
-  buildClient ? false
+, buildClient ? false
 , buildServer ? true
-, useSDL2 ? false
-,
+, buildProxy ? true
+, useSDL2 ? true
 }:
 let
   lib = pkgs.lib;
   # Using mini_compile_commands to export compile_commands.json
   # https://github.com/danielbarter/mini_compile_commands/
   # Look at the README.md file for instructions on generating compile_commands.json
-  mcc-env = (pkgs.callPackage miniCompileCommands { }).wrap pkgs.stdenv;
-  mcc-hook = (pkgs.callPackage miniCompileCommands { }).hook;
+  # mcc-env = (pkgs.callPackage miniCompileCommands { }).wrap pkgs.stdenv;
+  # mcc-hook = (pkgs.callPackage miniCompileCommands { }).hook;
+  stdenv = pkgs.stdenv;
 
+  useLuajit = lib.meta.availableOn stdenv.hostPlatform pkgs.luajit;
   # Stdenv is base for packaging software in Nix It is used to pull in dependencies such as the GCC toolchain,
   # GNU make, core utilities, patch and diff utilities, and so on. Basic tools needed to compile a huge pile
   # of software currently present in nixpkgs.
@@ -42,21 +34,20 @@ let
   # Some platforms have different toolchains in their StdEnv definition by default
   # To ensure gcc being default, we use gccStdenv as a base instead of just stdenv
   # mkDerivation is the main function used to build packages with the Stdenv
-  package = mcc-env.mkDerivation (self: {
+  # package = mcc-env.mkDerivation (self: {
+  package = stdenv.mkDerivation (self: {
     name = "luanti";
     version = "5.14.0";
 
     # Programs and libraries used/available at build-time
     nativeBuildInputs = with pkgs; [
-      mcc-hook # hook for generating compile commands when building the package
-
       ncurses
       cmake
       doxygen
       graphviz
       ninja
-
-      irrlicht
+      clang-tools
+      keepBuildTree
     ];
 
 
@@ -72,11 +63,12 @@ let
       ncurses
       gmp
       libspatialindex
-      irrlicht
       coreutils
     ]
-    ++ lib.optional (lib.meta.availableOn mcc-env.hostPlatform luajit) luajit
-    ++ lib.optionals mcc-env.hostPlatform.isDarwin [
+    ++ lib.optional useLuajit [
+      luajit
+    ]
+    ++ lib.optionals stdenv.hostPlatform.isDarwin [
       libiconv
     ]
     ++ lib.optionals buildClient [
@@ -90,11 +82,11 @@ let
     ++ lib.optionals (buildClient && useSDL2) [
       SDL2
     ]
-    ++ lib.optionals (buildClient && !mcc-env.hostPlatform.isDarwin && !useSDL2) [
+    ++ lib.optionals (buildClient && !stdenv.hostPlatform.isDarwin && !useSDL2) [
       xorg.libX11
       xorg.libXi
     ]
-    ++ lib.optionals buildServer [
+    ++ lib.optionals (buildServer || buildProxy) [
       leveldb
       libpq
       hiredis
@@ -123,15 +115,15 @@ let
       })
     ];
 
-    postPatch = lib.optionalString mcc-env.hostPlatform.isDarwin ''
+    postPatch = lib.optionalString stdenv.hostPlatform.isDarwin ''
       			sed -i '/pagezero_size/d;/fixup_bundle/d' src/CMakeLists.txt
       		'';
 
     postInstall =
-      lib.optionalString mcc-env.hostPlatform.isLinux ''
+      lib.optionalString stdenv.hostPlatform.isLinux ''
         				patchShebangs $out
         			''
-      + lib.optionalString mcc-env.hostPlatform.isDarwin ''
+      + lib.optionalString stdenv.hostPlatform.isDarwin ''
         				mkdir -p $out/Applications
         				mv $out/luanti.app $out/Applications
         			'';
@@ -153,9 +145,12 @@ let
       "--no-warn-unused-cli" # Supresses unused varibles warning
       (lib.cmakeBool "BUILD_CLIENT" buildClient)
       (lib.cmakeBool "BUILD_SERVER" buildServer)
+      (lib.cmakeBool "BUILD_PROXY" buildProxy)
       (lib.cmakeBool "BUILD_UNITTESTS" (lib.finalAttrs.finalPackage.doCheck or false))
       (lib.cmakeBool "ENABLE_PROMETHEUS" buildServer)
-      (lib.cmakeBool "USE_SDL2" buildClient)
+      (lib.cmakeBool "USE_SDL2" useSDL2)
+      (lib.cmakeBool "ENABLE_LUAJIT" useLuajit)
+      # (lib.cmakeBool "USE_CURSES" true)
       # Ensure we use system libraries
       (lib.cmakeBool "ENABLE_SYSTEM_GMP" true)
       (lib.cmakeBool "ENABLE_SYSTEM_JSONCPP" true)
@@ -178,7 +173,7 @@ let
     # Alternatively, we could have been pre-defining the default phases that nix does
     # for a CMake based projects (see definitions bellow that are commented-out ###)
 
-    ### buildDir = "build-nix-${self.name}-${self.version}";
+    # buildDir = "build-nix-${self.name}-${self.version}";
 
     ### configurePhase = ''
     ###   mkdir ./${self.buildDir} && cd ./${self.buildDir}
@@ -204,6 +199,7 @@ let
       # pkgs = pkgs
       # shell = shell
     };
+
     passthru.updateScript = lib.gitUpdater {
       allowedVersions = "\\.";
       ignoredVersions = "-android$";
@@ -212,12 +208,12 @@ let
   });
 
   # Development shell
-  shell = (pkgs.mkShell.override { stdenv = mcc-env; }) {
+  shell = (pkgs.mkShell.override { stdenv = stdenv; }) {
     LOCALE_ARCHIVE = "${pkgs.glibcLocales}/lib/locale/locale-archive";
     env.LANG = "C.UTF-8";
     env.LC_ALL = "C.UTF-8";
     # Copy build inputs (dependencies) from the derivation the nix-shell environment
-    # That way, there is no need for speciying dependenvies separately for derivation and shell
+    # That way, there is no need for speciying dependencies separately for derivation and shell
     inputsFrom = [
       package
     ];
@@ -231,6 +227,7 @@ let
       libjpeg
       libpng
       libGL
+      luajit
       SDL2
       openal
       curl
@@ -239,27 +236,25 @@ let
       gettext
       freetype
       sqlite
-      irrlicht
+      toilet
     ];
 
     # Hook used for modifying the prompt look and printing the welcome message
     shellHook = ''
-      PS1="\[\e[32m\][\[\e[m\]\[\e[33m\]nix-shell\\[\e[m\]:\[\e[36m\]\w\[\e[m\]\[\e[32m\]]\[\e[m\]\\$\[\e[m\] "
-      alias ll="ls -l"
+      		PS1="\[\e[32m\][\[\e[m\]\[\e[33m\]nix-shell\\[\e[m\]:\[\e[36m\]\w\[\e[m\]\[\e[32m\]]\[\e[m\]\\$\[\e[m\] "
+      		alias ll="ls -la"
+      		#nix build .#compileCommands --out-link compile_commands.json
+      		toilet -F gay -f future -w160 --metal --gay LUANTI-DEVSHELL
     '';
+
+    meta = with lib; {
+      homepage = "https://luanti.org";
+      description = "An open-source voxel game";
+      license = licenses.lgpl21Plus;
+      platforms = platforms.linux;
+      maintainers = [ ];
+      mainProgram = if buildClient then "luanti" else if buildProxy then "luantiproxy" else "luantiserver";
+    };
   };
 in
 package
-
-
-# stdenv.mkDerivation (finalAttrs: {
-#   pname = "luanti";
-#   version = "5.11.0";
-#
-#   src = fetchFromGitHub {
-#     owner = "luanti-org";
-#     repo = "luanti";
-#     tag = finalAttrs.version;
-#     hash = "sha256-0PJK7sS2oFTNWex9rLTgVIqaRhwuUb6H5HIlVOGA08k=";
-
-# })
