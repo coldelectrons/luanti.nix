@@ -3612,6 +3612,8 @@ Some types may inherit styles from parent types.
 * animated_image
     * noclip - boolean, set to true to allow the element to exceed formspec bounds.
 * box
+    * **Note**: In order for any of the styling options to take effect,
+                the `color` field in the box element must be left unspecified.
     * noclip - boolean, set to true to allow the element to exceed formspec bounds.
         * Defaults to false in formspec_version version 3 or higher
     * **Note**: `colors`, `bordercolors`, and `borderwidths` accept multiple input types:
@@ -7210,11 +7212,11 @@ This allows you easy interoperability for delegating work to jobs.
     * When `func` returns the callback is called (in the normal environment)
       with all of the return values as arguments.
     * Optional: Variable number of arguments that are passed to `func`
+    * Returns an `AsyncJob` async job.
 * `core.register_async_dofile(path)`:
     * Register a path to a Lua file to be imported when an async environment
       is initialized. You can use this to preload code which you can then call
       later using `core.handle_async()`.
-
 
 ### List of APIs available in an async environment
 
@@ -7373,11 +7375,13 @@ Server
         * `filedata`: the data of the file to be sent [*]
         * `to_player`: name of the player the media should be sent to instead of
                        all players (optional)
-        * `ephemeral`: boolean that marks the media as ephemeral,
-                       it will not be cached on the client (optional, default false)
+        * `ephemeral`: if true the server will create a copy of the file and
+                       forget about it once delivered (optional boolean, default false)
+        * `client_cache`: hint whether the client should save the media in its cache
+                          (optional boolean, default `!ephemeral`, added in 5.14.0)
         * Exactly one of the parameters marked [*] must be specified.
     * `callback`: function with arguments `name`, which is a player name
-    * Pushes the specified media file to client(s). (details below)
+    * Pushes the specified media file to client(s) as detailed below.
       The file must be a supported image, sound or model format.
       Dynamically added media is not persisted between server restarts.
     * Returns false on error, true if the request was accepted
@@ -7386,19 +7390,17 @@ Server
     * Details/Notes:
       * If `ephemeral`=false and `to_player` is unset the file is added to the media
         sent to clients on startup, this means the media will appear even on
-        old clients if they rejoin the server.
+        old clients (<5.3.0) if they rejoin the server.
       * If `ephemeral`=false the file must not be modified, deleted, moved or
-        renamed after calling this function.
-      * Regardless of any use of `ephemeral`, adding media files with the same
-        name twice is not possible/guaranteed to work. An exception to this is the
-        use of `to_player` to send the same, already existent file to multiple
-        chosen players.
+        renamed after calling this function. This is allowed otherwise.
+      * Adding media files with the same name twice is not possible.
+        An exception to this is the use of `to_player` to send the same,
+        already existent file to multiple chosen players (`ephemeral`=false only).
       * You can also call this at startup time. In that case `callback` MUST
         be `nil` and you cannot use `ephemeral` or `to_player`, as these logically
         do not make sense.
     * Clients will attempt to fetch files added this way via remote media,
-      this can make transfer of bigger files painless (if set up). Nevertheless
-      it is advised not to use dynamic media for big media files.
+      this can make transfer of bigger files painless (if set up).
 
 IPC
 ---
@@ -8049,6 +8051,15 @@ use the provided load and write functions for this.
   Returns success and, optionally, an error message.
 * `from_file(filename)`: Experimental. Like `from_string()`, but reads the data
   from a file.
+
+`AsyncJob`
+----------
+An `AsyncJob` is a reference to a job to be run in an async environment.
+
+### Methods
+* `cancel()`: try to cancel the job
+    * Returns whether the job was cancelled.
+    * A job can only be cancelled if it has not started.
 
 `InvRef`
 --------
@@ -9547,7 +9558,8 @@ Player properties need to be saved manually.
     stepheight = 0,
     -- If positive number, object will climb upwards when it moves
     -- horizontally against a `walkable` node, if the height difference
-    -- is within `stepheight`.
+    -- is within `stepheight` and if the object current max Y in the world
+    -- is greater or equal than the node min Y.
 
     automatic_face_movement_dir = 0.0,
     -- Automatically set yaw to movement direction, offset in degrees.

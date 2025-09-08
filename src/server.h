@@ -94,6 +94,8 @@ struct MediaInfo
 	std::string sha1_digest;
 	// true = not announced in TOCLIENT_ANNOUNCE_MEDIA (at player join)
 	bool no_announce;
+	// if true, this is an ephemeral entry. used by dynamic media.
+	bool ephemeral;
 	// does what it says. used by some cases of dynamic media.
 	bool delete_at_shutdown;
 
@@ -102,6 +104,7 @@ struct MediaInfo
 		path(path_),
 		sha1_digest(sha1_digest_),
 		no_announce(false),
+		ephemeral(false),
 		delete_at_shutdown(false)
 	{
 	}
@@ -299,6 +302,7 @@ public:
 		u32 token;
 		std::string to_player;
 		bool ephemeral = false;
+		bool client_cache = true;
 	};
 	bool dynamicAddMedia(const DynamicMediaArgs &args);
 
@@ -434,6 +438,8 @@ public:
 	// Returns all media files the server knows about
 	// map key = binary sha1, map value = file path
 	std::unordered_map<std::string, std::string> getMediaList();
+
+	static std::vector<std::string> getModStorageDatabaseBackends();
 
 	static ModStorageDatabase *openModStorageDatabase(const std::string &world_path);
 
