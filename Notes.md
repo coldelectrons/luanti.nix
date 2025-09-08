@@ -1,44 +1,42 @@
 ## Nixification
 - [x] build
-- [x] * generate compile_commands.json
-    - [ ] generate it as a separate item?
-        But how? currently mini_compile_commands is woven into the package, not a package itself
-
 ## Dev enironment
 - I am _not_ going to use VSCode
     - Neovim all the way
-- [x] devshell
-    - 20250830 devshell does work, but...
-        - despite using a compile_commands.json, (clangd) LSP can't find `<irrTypes.h>`
-            - and it's not supposed to use the system-installed version, luanti has a `irr/` directory!
-                How do I redirect a `#include <>`
-                - figure out more complicated `.clangd` file
-            - adding nixpkgs.irrlicht to the shell does not solve this problem
-        - you have to actually build to generate compile_commands.json
+- [ ] devshell
+    - [x] * generate compile_commands.json
+        - This can be done interactively in the devshell via cmake
+        - There doesn't seem to be a good, working automated method
+            - I've tried both `mini_compile_commands` and `compileCommandsFor`
+                - mini_compile_commands isn't working properly
+                    - produces cc.json, but paths are to /build/uuid instead of /nix/store/uuid
+                - switch to compileCommandsFor
+                    - success! mostly
+                    - now I just have issues of finding `config.h` which should be in "src/"
+                    - may also have issue of finding "cmake_config.h"
+                    - compileCommandsFor makes a bunch of '-I/build/xxx' flags for the project source
+                        - forked and added sed command to change them to '-I/nix/store/xxx'
+
+## Things I already hate
+- Preprocessor #if.then.else with #include files
+- cmake
+    - multiple layers hiding cmake on nixos
+        - luanti uses a 'cmake_config.h.in', but this is hidden away in the store
+        - there should be a way to not just link 'result' into the flake, but also 'build'
+- luanti is stuck around C++14, it seems
+    - upgrade to C++17/20/23, if it's not going to create net protocol problems
+        - that's a crapton of faffing about I've just given myself
 
 ## The harder part once dev environment is set up
-- Modernize C++ usage?
-    - Possibly, if something big comes up
-- Make a proxy class for multi-world game
-    - Instead of every server and client knowing about an extra world coordinate, isolate this feature and state to just the proxy
+- Make a multiplexor proxy for multi-world gameplay
+    - Instead of every server and client knowing about an extra world coordinate, isolate this feature and state to just the multiplexor proxy
         - Clients/servers/mods can remain vanilla
             - That's a lot of work to avoid
-    - (siwwy voice) But I wanna wun dis on my iwwy biwwy wazbewwy pi
-        - you should pick hardware to match the workload
-        - I don't fucking care
-    - The proxy is going to have to, to some degree, control the servers
-        - it would be best if the servers didn't have to be local to the proxy
-        - Merely multi-threading isn't going to quite cut it, need a little more isolation.
-            - spawned processes and ...?
-                - mod channels? It's built-in at this point
-                    - can it be a always-on control channel proxy<->server?
-                    - there currently has to be a client-server connection
-                        - could get around this be making a (preferably hidden) super-admin SYSTEM account
-                - control sockets? that deviates from vanilla servers
-                - Some form of pub-sub hub, IRC may fit the bit
-                    - keep it textual?
-                    - there's already a IRC server mod
-            - some worlds are going to be lairs, which will be a procedural layer beyond the overworld
-            - pocket worlds will be a bonus
-        - Isolation leads to a separate problem of synchronizing user data on world transition
-            -
+
+The mux should be almost like a server, with alot of stuff removed.
+The mux should handle login/auth, but not produce any content
+The server list should be dynamic, built off of IRC messaging
+
+Can the client handle the raw packet stream being multiplexed between servers?
+The client may not have provisions to restart the login sequence.
+The client should be able to pull content at any time - TODO check this.

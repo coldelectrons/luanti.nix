@@ -42,8 +42,8 @@ endif()
 mark_as_advanced(EXECUTABLE_OUTPUT_PATH LIBRARY_OUTPUT_PATH)
 
 
-if(NOT (BUILD_CLIENT OR BUILD_SERVER))
-	message(WARNING "Neither BUILD_CLIENT nor BUILD_SERVER is set! Setting BUILD_SERVER=true")
+if(NOT (BUILD_CLIENT OR BUILD_SERVER OR BUILD_MULTIPLEXER))
+	message(WARNING "Neither BUILD_CLIENT nor BUILD_SERVER nor BUILD_MULTIPLEXER is set! Setting BUILD_SERVER=true")
 	set(BUILD_SERVER TRUE)
 endif()
 
@@ -403,6 +403,7 @@ add_subdirectory(network)
 add_subdirectory(script)
 add_subdirectory(util)
 add_subdirectory(server)
+add_subdirectory(multiplexer)
 
 # Source files that are identical between server & client builds.
 # This means they don't use or include anything that depends on the
@@ -842,6 +843,83 @@ if(BUILD_SERVER)
 		target_precompile_headers(${PROJECT_NAME}server PRIVATE ${PRECOMPILED_HEADERS_LIST})
 	endif()
 endif(BUILD_SERVER)
+
+if(BUILD_MULTIPLEXER)
+	# server target
+	add_executable(${PROJECT_NAME}_multiplexer)
+	list(SORT multiplexer_SRCS)
+	target_sources(${PROJECT_NAME}_multiplexer PRIVATE
+		$<TARGET_OBJECTS:EngineCommon>
+		${multiplexer_SRCS}
+		${extra_windows_SRCS}
+	)
+
+	# don't link the irrlicht library
+	get_target_property(
+		IRRLICHT_INCLUDES IrrlichtMt::IrrlichtMt INTERFACE_INCLUDE_DIRECTORIES)
+	target_include_directories(${PROJECT_NAME}server PRIVATE ${IRRLICHT_INCLUDES})
+	target_link_libraries(
+		${PROJECT_NAME}_multiplexer
+		${ZLIB_LIBRARIES}
+		${ZSTD_LIBRARY}
+		${SQLITE3_LIBRARY}
+		${JSON_LIBRARY}
+		${LUA_LIBRARY}
+		${LUA_BIT_LIBRARY}
+		sha256
+		${GMP_LIBRARY}
+		${PLATFORM_LIBS}
+	)
+	target_compile_definitions(${PROJECT_NAME}_multiplexer PRIVATE "MT_BUILDTARGET=2")
+	if(NOT USE_LUAJIT)
+		set_target_properties(${PROJECT_NAME}_multiplexer PROPERTIES
+			# This is necessary for dynamic Lua modules
+			# to work when Lua is statically linked (issue #10806)
+			ENABLE_EXPORTS 1
+		)
+	endif()
+
+	if (USE_GETTEXT)
+		target_link_libraries(${PROJECT_NAME}_multiplexer ${GETTEXT_LIBRARY})
+	endif()
+	if (USE_CURSES)
+		target_link_libraries(${PROJECT_NAME}_multiplexer ${CURSES_LIBRARIES})
+	endif()
+	if (USE_POSTGRESQL)
+		target_link_libraries(${PROJECT_NAME}_multiplexer ${PostgreSQL_LIBRARIES})
+	endif()
+	if (USE_LEVELDB)
+		target_link_libraries(${PROJECT_NAME}_multiplexer ${LEVELDB_LIBRARY})
+	endif()
+	if (USE_REDIS)
+		target_link_libraries(${PROJECT_NAME}_multiplexer ${REDIS_LIBRARY})
+	endif()
+	if (USE_PROMETHEUS)
+		target_link_libraries(${PROJECT_NAME}_multiplexer ${PROMETHEUS_LIBRARIES})
+	endif()
+	if (USE_SPATIAL)
+		target_link_libraries(${PROJECT_NAME}_multiplexer ${SPATIAL_LIBRARY})
+	endif()
+	if (USE_OPENSSL)
+		target_link_libraries(${PROJECT_NAME}_multiplexer OpenSSL::Crypto)
+	endif()
+	if(USE_CURL)
+		target_link_libraries(
+			${PROJECT_NAME}_multiplexer
+			${CURL_LIBRARY}
+		)
+	endif()
+	if(BUILD_UNITTESTS OR BUILD_BENCHMARKS)
+		target_link_libraries(${PROJECT_NAME}_multiplexer Catch2::Catch2)
+	endif()
+	if(BUILD_WITH_TRACY)
+		target_link_libraries(${PROJECT_NAME}_multiplexer Tracy::TracyClient)
+	endif()
+
+	if(PRECOMPILE_HEADERS)
+		target_precompile_headers(${PROJECT_NAME}_multiplexer PRIVATE ${PRECOMPILED_HEADERS_LIST})
+	endif()
+endif(BUILD_MULTIPLEXER)
 
 # See issue #4638
 FILE(READ "${CMAKE_SOURCE_DIR}/src/unsupported_language_list.txt" GETTEXT_BLACKLISTED_LOCALES)
